@@ -1,0 +1,26 @@
+<svg width="480" height="180" viewBox="0 0 480 180" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Vortex Ranked Bedwars Logo</title>
+  <desc id="desc">Wordmark for Vortex Ranked Bedwars with neon gradient.</desc>
+  <defs>
+    <linearGradient id="vortexGradient" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6" />
+      <stop offset="50%" stop-color="#EC4899" />
+      <stop offset="100%" stop-color="#14B8A6" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="coloredBlur" />
+      <feMerge>
+        <feMergeNode in="coloredBlur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="480" height="180" rx="24" fill="#050409" />
+  <rect x="12" y="12" width="456" height="156" rx="20" fill="#0B1024" stroke="url(#vortexGradient)" stroke-width="3" filter="url(#glow)" />
+  <text x="40" y="100" font-family="'Montserrat', 'Segoe UI', sans-serif" font-size="64" font-weight="700" fill="url(#vortexGradient)">
+    VORTEX
+  </text>
+  <text x="42" y="142" font-family="'Montserrat', 'Segoe UI', sans-serif" font-size="40" font-weight="600" fill="#F8FAFC">
+    RANKED BEDWARS
+  </text>
+</svg>

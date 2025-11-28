@@ -1,0 +1,22 @@
+<svg width="1080" height="720" viewBox="0 0 1080 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Vortex Ranked Bedwars Promo</title>
+  <desc id="desc">Promotional artwork for the Vortex Ranked Bedwars community.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#030712" />
+      <stop offset="50%" stop-color="#111827" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <radialGradient id="pulse" cx="50%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.45" />
+      <stop offset="35%" stop-color="#EC4899" stop-opacity="0.35" />
+      <stop offset="70%" stop-color="#14B8A6" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#020617" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1080" height="720" fill="url(#bg)" />
+  <circle cx="540" cy="320" r="420" fill="url(#pulse)" />
+  <text x="540" y="330" font-family="'Montserrat', 'Segoe UI', sans-serif" font-size="96" font-weight="700" fill="#F8FAFC" text-anchor="middle">VORTEX</text>
+  <text x="540" y="420" font-family="'Montserrat', 'Segoe UI', sans-serif" font-size="64" font-weight="600" fill="#A5B4FC" letter-spacing="8" text-anchor="middle">RANKED BEDWARS</text>
+  <text x="540" y="495" font-family="'Montserrat', 'Segoe UI', sans-serif" font-size="32" font-weight="400" fill="#E5E7EB" text-anchor="middle">Asia's competitive Bedwars experience " play.vortexrbw.club</text>
+</svg>
