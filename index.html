@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="VORTEX Ranked Bedwars - The ultimate competitive Minecraft Bedwars experience">
+    <meta name="keywords" content="Minecraft, Bedwars, Ranked, PvP, Gaming, VORTEX">
+    <title>VORTEX Ranked Bedwars | vortexrbw.club</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <span class="logo">VORTEX</span>
+                <span class="subtitle">Ranked Bedwars</span>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#home">Home</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#leaderboard">Leaderboard</a></li>
+                <li><a href="#howtoplay">How to Play</a></li>
+                <li><a href="#discord" class="btn-discord">Discord</a></li>
+            </ul>
+            <div class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="hero-background"></div>
+        <div class="container hero-content">
+            <h1 class="hero-title">VORTEX <span class="gradient-text">RANKED BEDWARS</span></h1>
+            <p class="hero-subtitle">Experience the most competitive Bedwars gameplay</p>
+            <div class="hero-stats">
+                <div class="stat-box">
+                    <div class="stat-number" data-target="1250">0</div>
+                    <div class="stat-label">Active Players</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number" data-target="45000">0</div>
+                    <div class="stat-label">Games Played</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number" data-target="24">0</div>
+                    <div class="stat-label">Hours Online</div>
+                </div>
+            </div>
+            <div class="hero-cta">
+                <button class="btn btn-primary" onclick="copyIP()">
+                    <span>vortexrbw.club</span>
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M13 7H7V13H13V7Z" stroke="currentColor" stroke-width="2"/>
+                        <path d="M15 5H9V3H17V11H15V5Z" fill="currentColor"/>
+                    </svg>
+                </button>
+                <span class="copy-tooltip">Click to copy server IP</span>
+            </div>
+        </div>
+        <div class="scroll-indicator">
+            <div class="mouse">
+                <div class="wheel"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features">
+        <div class="container">
+            <h2 class="section-title">Why Choose <span class="gradient-text">VORTEX</span></h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                            <path d="M24 4L28.59 17.41L42 22L28.59 26.59L24 40L19.41 26.59L6 22L19.41 17.41L24 4Z" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <h3>Ranked System</h3>
+                    <p>Climb the ranks from Bronze to Master. Compete against players of similar skill level and prove you're the best.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                            <path d="M24 8L32 16L24 24L16 16L24 8Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M8 24L16 32L24 24L16 16L8 24Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M24 24L32 32L24 40L16 32L24 24Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M40 24L32 32L24 24L32 16L40 24Z" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <h3>Custom Maps</h3>
+                    <p>Play on professionally designed maps optimized for competitive gameplay and balanced strategies.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                            <circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="2"/>
+                            <path d="M24 12V24L32 28" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <h3>Anti-Cheat</h3>
+                    <p>Advanced anti-cheat system ensures fair gameplay for all players. Cheaters have no place here.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                            <path d="M8 24H40" stroke="currentColor" stroke-width="2"/>
+                            <path d="M24 8V40" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="24" cy="24" r="8" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <h3>Live Stats</h3>
+                    <p>Track your performance with detailed statistics, including K/D ratio, win rate, and ELO progression.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                            <path d="M16 20C16 14.4772 20.4772 10 26 10C31.5228 10 36 14.4772 36 20C36 25.5228 31.5228 30 26 30" stroke="currentColor" stroke-width="2"/>
+                            <path d="M22 30C22 24.4772 17.5228 20 12 20C6.47715 20 2 24.4772 2 30C2 35.5228 6.47715 40 12 40C17.5228 40 22 35.5228 22 30Z" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <h3>Active Community</h3>
+                    <p>Join thousands of players in our Discord community. Find teammates, share strategies, and stay updated.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                            <path d="M24 4L30 18L44 20L32 30L36 44L24 36L12 44L16 30L4 20L18 18L24 4Z" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <h3>Rewards & Perks</h3>
+                    <p>Earn exclusive cosmetics, titles, and rewards as you climb the ranks and achieve milestones.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Leaderboard Section -->
+    <section id="leaderboard" class="leaderboard">
+        <div class="container">
+            <h2 class="section-title">Top <span class="gradient-text">Players</span></h2>
+            <div class="leaderboard-container">
+                <div class="leaderboard-header">
+                    <span class="rank-col">Rank</span>
+                    <span class="player-col">Player</span>
+                    <span class="elo-col">ELO</span>
+                    <span class="wins-col">Wins</span>
+                    <span class="kd-col">K/D</span>
+                </div>
+                <div class="leaderboard-list">
+                    <div class="leaderboard-item rank-1">
+                        <span class="rank-col">
+                            <div class="rank-badge gold">1</div>
+                        </span>
+                        <span class="player-col">
+                            <div class="player-info">
+                                <div class="player-avatar" style="background: linear-gradient(135deg, #FFD700, #FFA500);">1</div>
+                                <span class="player-name">DiamondSlayer</span>
+                            </div>
+                        </span>
+                        <span class="elo-col">2847</span>
+                        <span class="wins-col">523</span>
+                        <span class="kd-col">4.2</span>
+                    </div>
+                    <div class="leaderboard-item rank-2">
+                        <span class="rank-col">
+                            <div class="rank-badge silver">2</div>
+                        </span>
+                        <span class="player-col">
+                            <div class="player-info">
+                                <div class="player-avatar" style="background: linear-gradient(135deg, #C0C0C0, #808080);">2</div>
+                                <span class="player-name">BedDestroyer</span>
+                            </div>
+                        </span>
+                        <span class="elo-col">2756</span>
+                        <span class="wins-col">489</span>
+                        <span class="kd-col">3.9</span>
+                    </div>
+                    <div class="leaderboard-item rank-3">
+                        <span class="rank-col">
+                            <div class="rank-badge bronze">3</div>
+                        </span>
+                        <span class="player-col">
+                            <div class="player-info">
+                                <div class="player-avatar" style="background: linear-gradient(135deg, #CD7F32, #8B4513);">3</div>
+                                <span class="player-name">VortexKing</span>
+                            </div>
+                        </span>
+                        <span class="elo-col">2698</span>
+                        <span class="wins-col">467</span>
+                        <span class="kd-col">3.7</span>
+                    </div>
+                    <div class="leaderboard-item">
+                        <span class="rank-col">4</span>
+                        <span class="player-col">
+                            <div class="player-info">
+                                <div class="player-avatar" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">4</div>
+                                <span class="player-name">PvPMaster</span>
+                            </div>
+                        </span>
+                        <span class="elo-col">2543</span>
+                        <span class="wins-col">412</span>
+                        <span class="kd-col">3.5</span>
+                    </div>
+                    <div class="leaderboard-item">
+                        <span class="rank-col">5</span>
+                        <span class="player-col">
+                            <div class="player-info">
+                                <div class="player-avatar" style="background: linear-gradient(135deg, #ec4899, #f43f5e);">5</div>
+                                <span class="player-name">SwiftBridge</span>
+                            </div>
+                        </span>
+                        <span class="elo-col">2489</span>
+                        <span class="wins-col">398</span>
+                        <span class="kd-col">3.3</span>
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-secondary">View Full Leaderboard</button>
+        </div>
+    </section>
+
+    <!-- How to Play Section -->
+    <section id="howtoplay" class="howtoplay">
+        <div class="container">
+            <h2 class="section-title">How to <span class="gradient-text">Join</span></h2>
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-number">1</div>
+                    <h3>Launch Minecraft</h3>
+                    <p>Open Minecraft Java Edition (version 1.8 - 1.20 supported)</p>
+                </div>
+                <div class="step-arrow">→</div>
+                <div class="step-card">
+                    <div class="step-number">2</div>
+                    <h3>Add Server</h3>
+                    <p>Click "Multiplayer" → "Add Server" and enter: <strong>vortexrbw.club</strong></p>
+                </div>
+                <div class="step-arrow">→</div>
+                <div class="step-card">
+                    <div class="step-number">3</div>
+                    <h3>Start Playing</h3>
+                    <p>Join the server and start your ranked journey to the top!</p>
+                </div>
+            </div>
+
+            <div class="rank-tiers">
+                <h3>Rank Tiers</h3>
+                <div class="tiers-grid">
+                    <div class="tier bronze">
+                        <div class="tier-icon">🥉</div>
+                        <div class="tier-name">Bronze</div>
+                        <div class="tier-elo">0 - 1000</div>
+                    </div>
+                    <div class="tier silver">
+                        <div class="tier-icon">🥈</div>
+                        <div class="tier-name">Silver</div>
+                        <div class="tier-elo">1000 - 1500</div>
+                    </div>
+                    <div class="tier gold">
+                        <div class="tier-icon">🥇</div>
+                        <div class="tier-name">Gold</div>
+                        <div class="tier-elo">1500 - 2000</div>
+                    </div>
+                    <div class="tier platinum">
+                        <div class="tier-icon">💎</div>
+                        <div class="tier-name">Platinum</div>
+                        <div class="tier-elo">2000 - 2500</div>
+                    </div>
+                    <div class="tier master">
+                        <div class="tier-icon">👑</div>
+                        <div class="tier-name">Master</div>
+                        <div class="tier-elo">2500+</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <div class="logo-large">VORTEX</div>
+                    <p>The ultimate competitive Bedwars experience</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-column">
+                        <h4>Quick Links</h4>
+                        <ul>
+                            <li><a href="#home">Home</a></li>
+                            <li><a href="#features">Features</a></li>
+                            <li><a href="#leaderboard">Leaderboard</a></li>
+                            <li><a href="#howtoplay">How to Play</a></li>
+                        </ul>
+                    </div>
+                    <div class="footer-column">
+                        <h4>Community</h4>
+                        <ul>
+                            <li><a href="#discord">Discord</a></li>
+                            <li><a href="#twitter">Twitter</a></li>
+                            <li><a href="#youtube">YouTube</a></li>
+                            <li><a href="#store">Store</a></li>
+                        </ul>
+                    </div>
+                    <div class="footer-column">
+                        <h4>Legal</h4>
+                        <ul>
+                            <li><a href="#rules">Server Rules</a></li>
+                            <li><a href="#privacy">Privacy Policy</a></li>
+                            <li><a href="#terms">Terms of Service</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 VORTEX Ranked Bedwars. All rights reserved.</p>
+                <p>Not affiliated with Mojang or Microsoft.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
