@@ -39,6 +39,7 @@ class BotConfig:
     token: str
     guild_id: int
     role_id: int
+    welcome_channel_id: int | None = None
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -46,6 +47,7 @@ class BotConfig:
             token = os.environ["DISCORD_TOKEN"].strip()
             guild_id = int(os.environ.get("DISCORD_GUILD_ID", "0"))
             role_id = int(os.environ.get("DISCORD_ROLE_ID", "0"))
+            welcome_channel_raw = os.environ.get("DISCORD_WELCOME_CHANNEL_ID")
         except KeyError as exc:  # Missing token
             raise RuntimeError(
                 "Missing DISCORD_TOKEN in environment."
@@ -60,7 +62,21 @@ class BotConfig:
                 "DISCORD_GUILD_ID and DISCORD_ROLE_ID env vars are required."
             )
 
-        return cls(token=token, guild_id=guild_id, role_id=role_id)
+        welcome_channel_id = None
+        if welcome_channel_raw:
+            try:
+                welcome_channel_id = int(welcome_channel_raw)
+            except ValueError as exc:
+                raise RuntimeError(
+                    "DISCORD_WELCOME_CHANNEL_ID must be an integer if provided."
+                ) from exc
+
+        return cls(
+            token=token,
+            guild_id=guild_id,
+            role_id=role_id,
+            welcome_channel_id=welcome_channel_id,
+        )
 
 
 intents = discord.Intents.default()
@@ -89,6 +105,93 @@ async def _resolve_role(guild: discord.Guild) -> discord.Role:
             f"Role id {config.role_id} is not available in guild {guild.id}."
         )
     return role
+
+
+async def _resolve_welcome_channel(
+    guild: discord.Guild,
+) -> discord.TextChannel | None:
+    """Resolve the welcome channel with fallbacks."""
+    config = _require_config()
+    me = guild.me
+    permissions_for = (
+        (lambda channel: channel.permissions_for(me) if me else None)
+    )
+
+    async def _ensure_text_channel(
+        channel: discord.abc.GuildChannel | None,
+    ) -> discord.TextChannel | None:
+        if isinstance(channel, discord.TextChannel):
+            perms = permissions_for(channel)
+            if perms and perms.send_messages:
+                return channel
+        return None
+
+    candidate: discord.TextChannel | None = None
+    if config.welcome_channel_id:
+        channel = guild.get_channel(config.welcome_channel_id)
+        if channel is None:
+            try:
+                channel = await guild.fetch_channel(config.welcome_channel_id)
+            except discord.HTTPException as exc:
+                LOGGER.error(
+                    "Failed to fetch welcome channel %s: %s",
+                    config.welcome_channel_id,
+                    exc,
+                )
+        candidate = await _ensure_text_channel(channel)
+        if candidate:
+            return candidate
+
+    candidate = await _ensure_text_channel(guild.system_channel)
+    if candidate:
+        return candidate
+
+    for text_channel in guild.text_channels:
+        perms = permissions_for(text_channel)
+        if perms and perms.send_messages:
+            return text_channel
+    return None
+
+
+def _format_ordinal(value: int) -> str:
+    if 10 <= value % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(value % 10, "th")
+    return f"{value}{suffix}"
+
+
+async def _send_welcome_message(member: discord.Member) -> None:
+    channel = await _resolve_welcome_channel(member.guild)
+    if channel is None:
+        LOGGER.warning(
+            "No suitable welcome channel found in guild %s", member.guild.id
+        )
+        return
+
+    member_count = member.guild.member_count or len(member.guild.members)
+    ordinal = _format_ordinal(member_count)
+    embed = discord.Embed(
+        title="Velkommen til serveren!",
+        description=(
+            f"{member.mention}, vi er glade for å ha deg her!\n"
+            f"Du er {ordinal} medlem i serveren (#{member_count:,})."
+        ),
+        color=discord.Color.blurple(),
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.add_field(
+        name="Tips",
+        value="Ta en titt innom kanalene og si hei til de andre!",
+        inline=False,
+    )
+    embed.set_footer(text=member.guild.name)
+
+    try:
+        await channel.send(embed=embed)
+        LOGGER.info("Welcome message sent for %s in %s", member, channel)
+    except discord.HTTPException as exc:
+        LOGGER.error("Failed to send welcome message for %s: %s", member, exc)
 
 
 @bot.event
@@ -120,6 +223,8 @@ async def on_member_join(member: discord.Member) -> None:
         LOGGER.info("Assigned autorole to %s", member)
     except discord.HTTPException as exc:
         LOGGER.error("Failed to assign role to %s: %s", member, exc)
+    finally:
+        await _send_welcome_message(member)
 
 
 @bot.command(name="autorole_refresh", help="Force reapply autorole to all members")
