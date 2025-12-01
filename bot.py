@@ -420,7 +420,7 @@ TICKET_DETAILS: dict[TicketType, dict[str, object]] = {
         "color": discord.Color.red(),
     },
     TicketType.APPLICATION: {
-        "label": "Staff / Creator Application",
+        "label": "Staff/Creator App",
         "emoji": "📝",
         "description": "Apply for staff or content roles.",
         "color": discord.Color.gold(),
@@ -581,7 +581,7 @@ class StaffApplicationModal(discord.ui.Modal):
     )
 
     def __init__(self) -> None:
-        super().__init__(title="Staff & Content Application")
+        super().__init__(title="Staff/Creator App")
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if interaction.guild is None or not isinstance(
@@ -652,7 +652,7 @@ class TicketTypeSelect(discord.ui.Select):
 class StaffApplicationButton(discord.ui.Button):
     def __init__(self) -> None:
         super().__init__(
-            label="Staff / Creator Application",
+            label="Staff/Creator App",
             style=discord.ButtonStyle.primary,
             emoji=TICKET_DETAILS[TicketType.APPLICATION]["emoji"],
             custom_id="support_panel:application",
