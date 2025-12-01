@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -38,6 +39,13 @@ DEFAULT_CONFIG = {
     "welcome_channel_id": 1444126854553403442,
     "support_channel_id": 1444126841811112006,
 }
+
+try:
+    GUILD_SCOPE_ID = int(os.environ.get("DISCORD_GUILD_ID", "0")) or DEFAULT_CONFIG["guild_id"]
+except ValueError:
+    GUILD_SCOPE_ID = DEFAULT_CONFIG["guild_id"]
+GUILD_OBJECT = discord.Object(id=GUILD_SCOPE_ID)
+_TREE_SYNCED = False
 
 DATA_DIR = Path("data")
 WARNINGS_FILE = DATA_DIR / "warnings.json"
@@ -143,11 +151,11 @@ def _parse_duration(duration: str) -> timedelta:
 
 def _assert_actionable(actor: discord.Member, target: discord.Member) -> None:
     if actor == target:
-        raise commands.BadArgument("You cannot target yourself.")
+        raise app_commands.AppCommandError("You cannot target yourself.")
     if target == target.guild.owner:
-        raise commands.BadArgument("You cannot target the server owner.")
+        raise app_commands.AppCommandError("You cannot target the server owner.")
     if actor != actor.guild.owner and target.top_role >= actor.top_role:
-        raise commands.BadArgument(
+        raise app_commands.AppCommandError(
             "You cannot target someone with an equal or higher role."
         )
 
@@ -351,6 +359,36 @@ async def _send_welcome_message(member: discord.Member) -> None:
         LOGGER.info("Welcome message sent for %s in %s", member, channel)
     except discord.HTTPException as exc:
         LOGGER.error("Failed to send welcome message for %s: %s", member, exc)
+
+
+async def _guard_interaction_in_guild(
+    interaction: discord.Interaction,
+) -> BotConfig | None:
+    config = _require_config()
+    if interaction.guild is None or interaction.guild.id != config.guild_id:
+        message = "This command can only be used inside the configured guild."
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
+        return None
+    return config
+
+
+async def _guard_interaction_moderator(
+    interaction: discord.Interaction,
+) -> tuple[BotConfig, discord.Member] | None:
+    config = await _guard_interaction_in_guild(interaction)
+    if config is None:
+        return None
+    if not isinstance(interaction.user, discord.Member):
+        message = "This command can only be used inside the guild."
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
+        return None
+    return config, interaction.user
 
 
 class TicketType(str, enum.Enum):
@@ -749,6 +787,14 @@ async def on_ready() -> None:
     LOGGER.info("Bot connected as %s.%s", bot.user, guild_info)
     if guild:
         await ensure_support_panel(guild)
+    global _TREE_SYNCED
+    if not _TREE_SYNCED:
+        try:
+            await bot.tree.sync(guild=discord.Object(id=config.guild_id))
+            _TREE_SYNCED = True
+            LOGGER.info("Slash commands synced for guild %s", config.guild_id)
+        except discord.HTTPException as exc:
+            LOGGER.error("Failed to sync slash commands: %s", exc)
 
 
 @bot.event
@@ -776,22 +822,29 @@ async def on_member_join(member: discord.Member) -> None:
         await _send_welcome_message(member)
 
 
-@bot.command(name="autorole_refresh", help="Force reapply autorole to all members")
-@commands.has_permissions(manage_roles=True)
-async def autorole_refresh(ctx: commands.Context) -> None:
-    config = _require_config()
-    if ctx.guild is None or ctx.guild.id != config.guild_id:
-        await ctx.send("This command can only be used in the configured guild.")
+@bot.tree.command(
+    name="autorole_refresh",
+    description="Force reapply the configured autorole to every member.",
+)
+@app_commands.guilds(GUILD_OBJECT)
+@app_commands.guild_only()
+@app_commands.checks.has_permissions(manage_roles=True)
+async def autorole_refresh_slash(interaction: discord.Interaction) -> None:
+    config = await _guard_interaction_in_guild(interaction)
+    if config is None or interaction.guild is None:
         return
 
+    await interaction.response.defer(thinking=True, ephemeral=True)
     try:
-        role = await _resolve_role(ctx.guild)
+        role = await _resolve_role(interaction.guild)
     except RuntimeError as exc:
-        await ctx.send(f"Autorole is not configured correctly: {exc}")
+        await interaction.followup.send(
+            f"Autorole is not configured correctly: {exc}", ephemeral=True
+        )
         return
 
     updated = 0
-    for member in ctx.guild.members:
+    for member in interaction.guild.members:
         if role not in member.roles:
             try:
                 await member.add_roles(role, reason="Autorole refresh command")
@@ -800,108 +853,143 @@ async def autorole_refresh(ctx: commands.Context) -> None:
                 continue
             updated += 1
 
-    await ctx.send(f"Autorole applied to {updated} member(s).")
+    await interaction.followup.send(
+        f"Autorole applied to {updated} member(s).", ephemeral=True
+    )
 
 
-@autorole_refresh.error
-async def autorole_refresh_error(ctx: commands.Context, error: Exception) -> None:
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("You need manage_roles permission to run this command.")
-    else:
-        LOGGER.exception("autorole_refresh command error: %s", error)
-        await ctx.send("An unexpected error occurred. Check the bot logs for details.")
-
-
-@bot.command(name="ban", help="Ban a member from the server.")
-@commands.has_permissions(ban_members=True)
-@commands.bot_has_permissions(ban_members=True)
-async def ban_command(
-    ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided."
+@bot.tree.command(name="ban", description="Ban a member from the server.")
+@app_commands.guilds(GUILD_OBJECT)
+@app_commands.guild_only()
+@app_commands.describe(member="Member to ban", reason="Reason for the ban")
+@app_commands.checks.has_permissions(ban_members=True)
+@app_commands.checks.bot_has_permissions(ban_members=True)
+async def slash_ban(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    reason: str | None = None,
 ) -> None:
-    if ctx.guild is None:
-        await ctx.send("This command can only be used inside the server.")
+    guarded = await _guard_interaction_moderator(interaction)
+    if guarded is None:
         return
-    _assert_actionable(ctx.author, member)
-    await member.ban(reason=f"{ctx.author} - {reason}", delete_message_days=0)
-    await ctx.send(f"{member.mention} has been banned. Reason: {reason}")
+    _, actor = guarded
+    reason_text = reason or "No reason provided."
+    _assert_actionable(actor, member)
+    await member.ban(reason=f"{actor} - {reason_text}", delete_message_days=0)
+    await interaction.response.send_message(
+        f"{member.mention} has been banned. Reason: {reason_text}",
+        ephemeral=False,
+    )
 
 
-@bot.command(name="kick", help="Kick a member from the server.")
-@commands.has_permissions(kick_members=True)
-@commands.bot_has_permissions(kick_members=True)
-async def kick_command(
-    ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided."
+@bot.tree.command(name="kick", description="Kick a member from the server.")
+@app_commands.guilds(GUILD_OBJECT)
+@app_commands.guild_only()
+@app_commands.describe(member="Member to kick", reason="Reason for the kick")
+@app_commands.checks.has_permissions(kick_members=True)
+@app_commands.checks.bot_has_permissions(kick_members=True)
+async def slash_kick(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    reason: str | None = None,
 ) -> None:
-    if ctx.guild is None:
-        await ctx.send("This command can only be used inside the server.")
+    guarded = await _guard_interaction_moderator(interaction)
+    if guarded is None:
         return
-    _assert_actionable(ctx.author, member)
-    await member.kick(reason=f"{ctx.author} - {reason}")
-    await ctx.send(f"{member.mention} has been kicked. Reason: {reason}")
+    _, actor = guarded
+    reason_text = reason or "No reason provided."
+    _assert_actionable(actor, member)
+    await member.kick(reason=f"{actor} - {reason_text}")
+    await interaction.response.send_message(
+        f"{member.mention} has been kicked. Reason: {reason_text}", ephemeral=False
+    )
 
 
-@bot.command(
+@bot.tree.command(
     name="mute",
-    help="Timeout a member. Usage: !mute @user 30m reason (supports s/m/h/d).",
+    description="Timeout a member. Duration supports s/m/h/d (e.g. 30m).",
 )
-@commands.has_permissions(moderate_members=True)
-@commands.bot_has_permissions(moderate_members=True)
-async def mute_command(
-    ctx: commands.Context,
+@app_commands.guilds(GUILD_OBJECT)
+@app_commands.guild_only()
+@app_commands.describe(
+    member="Member to mute",
+    duration="Examples: 30m, 2h, 1h30m",
+    reason="Reason for the mute",
+)
+@app_commands.checks.has_permissions(moderate_members=True)
+@app_commands.checks.bot_has_permissions(moderate_members=True)
+async def slash_mute(
+    interaction: discord.Interaction,
     member: discord.Member,
     duration: str,
-    *,
-    reason: str = "No reason provided.",
+    reason: str | None = None,
 ) -> None:
-    if ctx.guild is None:
-        await ctx.send("This command can only be used inside the server.")
+    guarded = await _guard_interaction_moderator(interaction)
+    if guarded is None:
         return
-    _assert_actionable(ctx.author, member)
+    _, actor = guarded
+    _assert_actionable(actor, member)
     try:
         delta = _parse_duration(duration)
     except ValueError as exc:
-        await ctx.send(str(exc))
+        if interaction.response.is_done():
+            await interaction.followup.send(str(exc), ephemeral=True)
+        else:
+            await interaction.response.send_message(str(exc), ephemeral=True)
         return
     until = discord.utils.utcnow() + delta
-    await member.timeout(until, reason=f"{ctx.author} - {reason}")
-    await ctx.send(
-        f"{member.mention} has been muted for {duration}. Reason: {reason}"
+    reason_text = reason or "No reason provided."
+    await member.timeout(until, reason=f"{actor} - {reason_text}")
+    await interaction.response.send_message(
+        f"{member.mention} has been muted for {duration}. Reason: {reason_text}",
+        ephemeral=False,
     )
 
 
-@bot.command(name="warn", help="Issue a formal warning to a member.")
-@commands.has_permissions(manage_messages=True)
-async def warn_command(
-    ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided."
+@bot.tree.command(name="warn", description="Issue a formal warning to a member.")
+@app_commands.guilds(GUILD_OBJECT)
+@app_commands.guild_only()
+@app_commands.describe(member="Member to warn", reason="Reason for the warning")
+@app_commands.checks.has_permissions(manage_messages=True)
+async def slash_warn(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    reason: str | None = None,
 ) -> None:
-    if ctx.guild is None:
-        await ctx.send("This command can only be used inside the server.")
+    guarded = await _guard_interaction_moderator(interaction)
+    if guarded is None:
         return
-    _assert_actionable(ctx.author, member)
+    config, actor = guarded
+    _assert_actionable(actor, member)
+    reason_text = reason or "No reason provided."
     count = _record_warning(
-        guild_id=ctx.guild.id,
+        guild_id=config.guild_id,
         user_id=member.id,
-        moderator_id=ctx.author.id,
-        reason=reason,
+        moderator_id=actor.id,
+        reason=reason_text,
     )
-    await ctx.send(
-        f"{member.mention} has been warned (warning #{count}). Reason: {reason}"
+    await interaction.response.send_message(
+        f"{member.mention} has been warned (warning #{count}). Reason: {reason_text}",
+        ephemeral=True,
     )
 
 
-@bot.command(
-    name="warnings",
-    aliases=["warns"],
-    help="Show the stored warnings for a member.",
-)
-@commands.has_permissions(manage_messages=True)
-async def warnings_command(ctx: commands.Context, member: discord.Member) -> None:
-    if ctx.guild is None:
-        await ctx.send("This command can only be used inside the server.")
+@bot.tree.command(name="warnings", description="Show warnings recorded for a member.")
+@app_commands.guilds(GUILD_OBJECT)
+@app_commands.guild_only()
+@app_commands.describe(member="Member whose warnings you want to view")
+@app_commands.checks.has_permissions(manage_messages=True)
+async def slash_warnings(
+    interaction: discord.Interaction, member: discord.Member
+) -> None:
+    config = await _guard_interaction_in_guild(interaction)
+    if config is None or interaction.guild is None:
         return
-    entries = _get_warnings(ctx.guild.id, member.id)
+    entries = _get_warnings(config.guild_id, member.id)
     if not entries:
-        await ctx.send(f"{member.mention} has no warnings on record.")
+        await interaction.response.send_message(
+            f"{member.mention} has no warnings on record.", ephemeral=True
+        )
         return
     embed = discord.Embed(
         title=f"Warnings for {member}",
@@ -918,7 +1006,31 @@ async def warnings_command(ctx: commands.Context, member: discord.Member) -> Non
             value=f"{moderator_ref}: {reason}",
             inline=False,
         )
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@bot.tree.error
+async def on_app_command_error(
+    interaction: discord.Interaction, error: app_commands.AppCommandError
+) -> None:
+    if isinstance(error, app_commands.errors.MissingPermissions):
+        message = "You are missing the required permissions for this command."
+    elif isinstance(error, app_commands.errors.BotMissingPermissions):
+        missing = ", ".join(error.missing_permissions)
+        message = f"I am missing required permissions: {missing}"
+    elif isinstance(error, app_commands.errors.CheckFailure):
+        message = "You cannot run this command in this context."
+    elif isinstance(error, app_commands.errors.CommandInvokeError):
+        LOGGER.exception("Slash command raised: %s", error)
+        message = "An unexpected error occurred while running this command."
+    else:
+        LOGGER.exception("Unhandled slash command error: %s", error)
+        message = "Something went wrong while handling that command."
+
+    if interaction.response.is_done():
+        await interaction.followup.send(message, ephemeral=True)
+    else:
+        await interaction.response.send_message(message, ephemeral=True)
 
 
 if __name__ == "__main__":
