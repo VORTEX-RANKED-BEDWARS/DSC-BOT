@@ -172,17 +172,17 @@ async def _send_welcome_message(member: discord.Member) -> None:
     member_count = member.guild.member_count or len(member.guild.members)
     ordinal = _format_ordinal(member_count)
     embed = discord.Embed(
-        title="Velkommen til serveren!",
+        title="Welcome to the server!",
         description=(
-            f"{member.mention}, vi er glade for å ha deg her!\n"
-            f"Du er {ordinal} medlem i serveren (#{member_count:,})."
+            f"{member.mention}, we're excited to have you here!\n"
+            f"You are the {ordinal} member in this community (#{member_count:,})."
         ),
         color=discord.Color.blurple(),
     )
     embed.set_thumbnail(url=member.display_avatar.url)
     embed.add_field(
-        name="Tips",
-        value="Ta en titt innom kanalene og si hei til de andre!",
+        name="Getting started",
+        value="Check out the info channels and say hi to everyone!",
         inline=False,
     )
     embed.set_footer(text=member.guild.name)
