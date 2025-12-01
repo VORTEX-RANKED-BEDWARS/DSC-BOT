@@ -7,10 +7,14 @@ re-assign the autorole to all members.
 from __future__ import annotations
 
 import enum
+import json
 import logging
 import os
 import re
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Dict, List
 
 import discord
 from discord.ext import commands
@@ -34,6 +38,118 @@ DEFAULT_CONFIG = {
     "welcome_channel_id": 1444126854553403442,
     "support_channel_id": 1444126841811112006,
 }
+
+DATA_DIR = Path("data")
+WARNINGS_FILE = DATA_DIR / "warnings.json"
+
+FORBIDDEN_WORDS = [
+    "nga",
+    "ngr",
+    "nigga",
+    "nigger",
+    "n1gger",
+    "n1gga",
+    "n!gger",
+    "n!gga",
+    "retard",
+    "fucking",
+]
+
+FORBIDDEN_MESSAGE = (
+    "Your message was removed because it contained language that violates our guidelines."
+)
+
+
+def _load_warning_store() -> Dict[str, Dict[str, List[dict[str, Any]]]]:
+    DATA_DIR.mkdir(exist_ok=True)
+    if WARNINGS_FILE.exists():
+        try:
+            with WARNINGS_FILE.open("r", encoding="utf-8") as handle:
+                data = json.load(handle)
+                if isinstance(data, dict):
+                    return data  # type: ignore[return-value]
+        except json.JSONDecodeError as exc:
+            LOGGER.warning("Failed to parse warnings file: %s", exc)
+    return {}
+
+
+_WARNINGS: Dict[str, Dict[str, List[dict[str, Any]]]] = _load_warning_store()
+
+
+def _save_warning_store() -> None:
+    DATA_DIR.mkdir(exist_ok=True)
+    with WARNINGS_FILE.open("w", encoding="utf-8") as handle:
+        json.dump(_WARNINGS, handle, indent=2)
+
+
+def _record_warning(
+    guild_id: int,
+    user_id: int,
+    moderator_id: int,
+    reason: str,
+) -> int:
+    guild_key = str(guild_id)
+    user_key = str(user_id)
+    entry = {
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "moderator_id": moderator_id,
+        "reason": reason,
+    }
+    guild_warnings = _WARNINGS.setdefault(guild_key, {})
+    user_warnings = guild_warnings.setdefault(user_key, [])
+    user_warnings.append(entry)
+    _save_warning_store()
+    return len(user_warnings)
+
+
+def _get_warnings(guild_id: int, user_id: int) -> List[dict[str, Any]]:
+    return _WARNINGS.get(str(guild_id), {}).get(str(user_id), [])
+
+
+def _contains_forbidden_text(message: str) -> tuple[bool, str | None]:
+    lowered = message.lower()
+    collapsed = re.sub(r"[^a-z0-9]+", "", lowered)
+    for word in FORBIDDEN_WORDS:
+        if word in lowered or word in collapsed:
+            return True, word
+    return False, None
+
+
+_DURATION_PATTERN = re.compile(r"(\d+)([smhd])")
+_MAX_TIMEOUT = timedelta(days=28)
+
+
+def _parse_duration(duration: str) -> timedelta:
+    matches = _DURATION_PATTERN.findall(duration.lower())
+    if not matches:
+        raise ValueError(
+            "Invalid duration. Use formats like 30m, 2h, or 1h30m (s/m/h/d)."
+        )
+    total = timedelta()
+    for amount, unit in matches:
+        value = int(amount)
+        if unit == "s":
+            total += timedelta(seconds=value)
+        elif unit == "m":
+            total += timedelta(minutes=value)
+        elif unit == "h":
+            total += timedelta(hours=value)
+        elif unit == "d":
+            total += timedelta(days=value)
+    if total <= timedelta(seconds=0) or total > _MAX_TIMEOUT:
+        raise ValueError("Duration must be between 1 second and 28 days.")
+    return total
+
+
+def _assert_actionable(actor: discord.Member, target: discord.Member) -> None:
+    if actor == target:
+        raise commands.BadArgument("You cannot target yourself.")
+    if target == target.guild.owner:
+        raise commands.BadArgument("You cannot target the server owner.")
+    if actor != actor.guild.owner and target.top_role >= actor.top_role:
+        raise commands.BadArgument(
+            "You cannot target someone with an equal or higher role."
+        )
 
 
 def _require_config() -> BotConfig:
@@ -584,6 +700,48 @@ bot.add_view(SupportPanelView())
 
 
 @bot.event
+async def on_message(message: discord.Message) -> None:
+    if message.author.bot:
+        return
+
+    try:
+        config = _require_config()
+    except RuntimeError:
+        await bot.process_commands(message)
+        return
+
+    if message.guild is None or message.guild.id != config.guild_id:
+        await bot.process_commands(message)
+        return
+
+    flagged, banned_word = _contains_forbidden_text(message.content)
+    if flagged:
+        reason = (
+            f"Automod caught prohibited term '{banned_word}'" if banned_word else ""
+        )
+        try:
+            await message.delete()
+        except discord.HTTPException:
+            LOGGER.warning("Failed to delete flagged message from %s", message.author)
+        count = _record_warning(
+            guild_id=message.guild.id,
+            user_id=message.author.id,
+            moderator_id=bot.user.id if bot.user else 0,
+            reason=reason or "Automated language filter",
+        )
+        try:
+            await message.channel.send(
+                f"{message.author.mention} {FORBIDDEN_MESSAGE} "
+                f"(warning #{count}).",
+                delete_after=15,
+            )
+        except discord.HTTPException:
+            LOGGER.warning("Failed to send automod notice in %s", message.channel.id)
+
+    await bot.process_commands(message)
+
+
+@bot.event
 async def on_ready() -> None:
     config = _require_config()
     guild = bot.get_guild(config.guild_id)
@@ -652,6 +810,115 @@ async def autorole_refresh_error(ctx: commands.Context, error: Exception) -> Non
     else:
         LOGGER.exception("autorole_refresh command error: %s", error)
         await ctx.send("An unexpected error occurred. Check the bot logs for details.")
+
+
+@bot.command(name="ban", help="Ban a member from the server.")
+@commands.has_permissions(ban_members=True)
+@commands.bot_has_permissions(ban_members=True)
+async def ban_command(
+    ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided."
+) -> None:
+    if ctx.guild is None:
+        await ctx.send("This command can only be used inside the server.")
+        return
+    _assert_actionable(ctx.author, member)
+    await member.ban(reason=f"{ctx.author} - {reason}", delete_message_days=0)
+    await ctx.send(f"{member.mention} has been banned. Reason: {reason}")
+
+
+@bot.command(name="kick", help="Kick a member from the server.")
+@commands.has_permissions(kick_members=True)
+@commands.bot_has_permissions(kick_members=True)
+async def kick_command(
+    ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided."
+) -> None:
+    if ctx.guild is None:
+        await ctx.send("This command can only be used inside the server.")
+        return
+    _assert_actionable(ctx.author, member)
+    await member.kick(reason=f"{ctx.author} - {reason}")
+    await ctx.send(f"{member.mention} has been kicked. Reason: {reason}")
+
+
+@bot.command(
+    name="mute",
+    help="Timeout a member. Usage: !mute @user 30m reason (supports s/m/h/d).",
+)
+@commands.has_permissions(moderate_members=True)
+@commands.bot_has_permissions(moderate_members=True)
+async def mute_command(
+    ctx: commands.Context,
+    member: discord.Member,
+    duration: str,
+    *,
+    reason: str = "No reason provided.",
+) -> None:
+    if ctx.guild is None:
+        await ctx.send("This command can only be used inside the server.")
+        return
+    _assert_actionable(ctx.author, member)
+    try:
+        delta = _parse_duration(duration)
+    except ValueError as exc:
+        await ctx.send(str(exc))
+        return
+    until = discord.utils.utcnow() + delta
+    await member.timeout(until, reason=f"{ctx.author} - {reason}")
+    await ctx.send(
+        f"{member.mention} has been muted for {duration}. Reason: {reason}"
+    )
+
+
+@bot.command(name="warn", help="Issue a formal warning to a member.")
+@commands.has_permissions(manage_messages=True)
+async def warn_command(
+    ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided."
+) -> None:
+    if ctx.guild is None:
+        await ctx.send("This command can only be used inside the server.")
+        return
+    _assert_actionable(ctx.author, member)
+    count = _record_warning(
+        guild_id=ctx.guild.id,
+        user_id=member.id,
+        moderator_id=ctx.author.id,
+        reason=reason,
+    )
+    await ctx.send(
+        f"{member.mention} has been warned (warning #{count}). Reason: {reason}"
+    )
+
+
+@bot.command(
+    name="warnings",
+    aliases=["warns"],
+    help="Show the stored warnings for a member.",
+)
+@commands.has_permissions(manage_messages=True)
+async def warnings_command(ctx: commands.Context, member: discord.Member) -> None:
+    if ctx.guild is None:
+        await ctx.send("This command can only be used inside the server.")
+        return
+    entries = _get_warnings(ctx.guild.id, member.id)
+    if not entries:
+        await ctx.send(f"{member.mention} has no warnings on record.")
+        return
+    embed = discord.Embed(
+        title=f"Warnings for {member}",
+        color=discord.Color.orange(),
+        description=f"{len(entries)} warning(s) on file.",
+    )
+    for entry in entries[-5:]:
+        timestamp = entry.get("timestamp", "unknown time")
+        reason = entry.get("reason", "No reason provided.")
+        moderator_id = entry.get("moderator_id")
+        moderator_ref = f"<@{moderator_id}>" if moderator_id else "Unknown mod"
+        embed.add_field(
+            name=timestamp,
+            value=f"{moderator_ref}: {reason}",
+            inline=False,
+        )
+    await ctx.send(embed=embed)
 
 
 if __name__ == "__main__":
