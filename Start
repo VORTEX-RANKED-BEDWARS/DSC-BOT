@@ -1,1 +1,15 @@
-hi
+Discord AutoRole Bot
+====================
+
+Files:
+- `bot.py`: Discord bot code. Loads config from environment and listens for new members.
+- `requirements.txt`: Python dependencies (`discord.py` and `python-dotenv`).
+- `.env.example`: Copy to `.env`, fill in the bot token, and keep the provided guild/role IDs.
+
+Running locally:
+1. `python -m venv .venv && source .venv/bin/activate`
+2. `pip install -r requirements.txt`
+3. `cp .env.example .env` and set `DISCORD_TOKEN` to your bot token.
+4. `python bot.py`
+
+The bot automatically runs in guild `1443680950952394784` and assigns role `1444126866746245253` whenever someone joins. Use `!autorole_refresh` (manage_roles permission required) to reapply it to all members.
