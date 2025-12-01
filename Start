@@ -2,14 +2,14 @@ Discord AutoRole Bot
 ====================
 
 Files:
-- `bot.py`: Discord bot code. Loads config from environment and listens for new members.
+- `bot.py`: Discord bot code. Loads config from environment, handles autorole, welcome embeds, and the ticket/support system.
 - `requirements.txt`: Python dependencies (`discord.py` and `python-dotenv`).
-- `.env.example`: Copy to `.env`, fill in the bot token, keep the provided guild/role IDs, and optionally set a welcome channel.
+- `.env.example`: Copy to `.env`, fill in the bot token, keep the provided guild/role IDs, optionally set a welcome channel, and point to the support channel for the ticket panel.
 
 Running locally:
 1. `python -m venv .venv && source .venv/bin/activate`
 2. `pip install -r requirements.txt`
-3. `cp .env.example .env` and set `DISCORD_TOKEN` to your bot token. (Optional) set `DISCORD_WELCOME_CHANNEL_ID` to the text channel for welcome messages.
+3. `cp .env.example .env` and set `DISCORD_TOKEN` to your bot token. (Optional) set `DISCORD_WELCOME_CHANNEL_ID`, and configure `DISCORD_SUPPORT_CHANNEL_ID` to the text channel where you want the ticket panel.
 4. `python bot.py`
 
-The bot automatically runs in guild `1443680950952394784`, assigns role `1444126866746245253`, and posts a rich welcome embed (with avatar + member number) whenever someone joins. Use `!autorole_refresh` (manage_roles permission required) to reapply the autorole to all members.
+The bot automatically runs in guild `1443680950952394784`, assigns role `1444126866746245253`, posts a rich welcome embed (with avatar + member number), and maintains a persistent ticket panel in support channel `1444126841811112006`. The panel includes dropdown + button workflows for General, Partner, Report, and Application tickets with modals collecting professional details. Use `!autorole_refresh` (manage_roles permission required) to reapply the autorole to all members.
