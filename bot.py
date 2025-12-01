@@ -33,7 +33,6 @@ LOGGER = logging.getLogger("autorole")
 _config: BotConfig | None = None
 
 DEFAULT_CONFIG = {
-    "token": "MTQ0NDk0MzA5NjY4NDIyMDQ1OA.G9Yxsm.gc6zhnrmK6bbOFyLJGEaiP8Fz8Fkx5tjt9gk0Q",
     "guild_id": 1443680950952394784,
     "role_id": 1444126866746245253,
     "welcome_channel_id": 1444126854553403442,
@@ -178,9 +177,11 @@ class BotConfig:
 
     @classmethod
     def from_env(cls) -> "BotConfig":
-        token = os.environ.get("DISCORD_TOKEN", DEFAULT_CONFIG["token"]).strip()
-        if not token:
-            raise RuntimeError("DISCORD_TOKEN is required.")
+        token = os.environ.get("DISCORD_TOKEN", "").strip()
+        if not token or token.lower().startswith("replace-with"):
+            raise RuntimeError(
+                "DISCORD_TOKEN env var is required. Set it in .env or your process manager."
+            )
 
         def _coerce_int(name: str, *, default: int | None, required: bool) -> int | None:
             value = os.environ.get(name)
@@ -224,6 +225,7 @@ class BotConfig:
 intents = discord.Intents.default()
 intents.members = True
 intents.guilds = True
+intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
