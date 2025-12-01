@@ -1,0 +1,22 @@
+{
+  "name": "discord-auto-role-bot",
+  "version": "1.0.0",
+  "description": "Discord bot that automatically assigns a role to new members.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "autorole"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "discord.js": "^14.25.1",
+    "dotenv": "^17.2.3"
+  }
+}
