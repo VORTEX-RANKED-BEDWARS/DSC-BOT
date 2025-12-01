@@ -37,6 +37,7 @@ DEFAULT_CONFIG = {
     "role_id": 1444126866746245253,
     "welcome_channel_id": 1444126854553403442,
     "support_channel_id": 1444126841811112006,
+    "support_team_role_id": 1444995538054418452,
 }
 
 try:
@@ -174,6 +175,7 @@ class BotConfig:
     role_id: int
     welcome_channel_id: int | None = None
     support_channel_id: int | None = None
+    support_team_role_id: int | None = None
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -212,6 +214,11 @@ class BotConfig:
             default=DEFAULT_CONFIG["support_channel_id"],
             required=False,
         )
+        support_team_role_id = _coerce_int(
+            "DISCORD_SUPPORT_TEAM_ROLE_ID",
+            default=DEFAULT_CONFIG["support_team_role_id"],
+            required=False,
+        )
 
         return cls(
             token=token,
@@ -219,6 +226,7 @@ class BotConfig:
             role_id=role_id or 0,
             welcome_channel_id=welcome_channel_id,
             support_channel_id=support_channel_id,
+            support_team_role_id=support_team_role_id,
         )
 
 
@@ -322,6 +330,25 @@ async def _resolve_support_channel(
     return None
 
 
+def _support_role(guild: discord.Guild) -> discord.Role | None:
+    config = _require_config()
+    if not config.support_team_role_id:
+        return None
+    role = guild.get_role(config.support_team_role_id)
+    if role is None:
+        LOGGER.warning(
+            "Support team role %s not found in guild %s",
+            config.support_team_role_id,
+            guild.id,
+        )
+    return role
+
+
+def _has_support_role(member: discord.Member) -> bool:
+    role = _support_role(member.guild)
+    return bool(role and role in member.roles)
+
+
 def _format_ordinal(value: int) -> str:
     if 10 <= value % 100 <= 20:
         suffix = "th"
@@ -393,11 +420,39 @@ async def _guard_interaction_moderator(
     return config, interaction.user
 
 
+async def _ticket_staff_guard(
+    interaction: discord.Interaction,
+) -> tuple[discord.Thread, discord.Member] | None:
+    config = await _guard_interaction_in_guild(interaction)
+    if config is None or interaction.guild is None:
+        return None
+    if not isinstance(interaction.channel, discord.Thread):
+        message = "This command can only be used inside a ticket thread."
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
+        return None
+    if not isinstance(interaction.user, discord.Member):
+        await interaction.response.send_message(
+            "Only members inside the guild can run this.", ephemeral=True
+        )
+        return None
+    if not _has_support_role(interaction.user):
+        await interaction.response.send_message(
+            "You need the support role to manage tickets.", ephemeral=True
+        )
+        return None
+    return interaction.channel, interaction.user
+
+
 class TicketType(str, enum.Enum):
     GENERAL = "general"
     PARTNER = "partner"
     REPORT = "report"
-    APPLICATION = "application"
+    STAFF = "staff"
+    CREATOR = "creator"
+    BUILDER = "builder"
 
 
 TICKET_DETAILS: dict[TicketType, dict[str, object]] = {
@@ -419,11 +474,23 @@ TICKET_DETAILS: dict[TicketType, dict[str, object]] = {
         "description": "Report rule breaks or technical problems.",
         "color": discord.Color.red(),
     },
-    TicketType.APPLICATION: {
-        "label": "Staff/Creator App",
-        "emoji": "📝",
-        "description": "Apply for staff or content roles.",
+    TicketType.STAFF: {
+        "label": "Staff App",
+        "emoji": "🛡️",
+        "description": "Apply to join the moderation team.",
         "color": discord.Color.gold(),
+    },
+    TicketType.CREATOR: {
+        "label": "Creator App",
+        "emoji": "🎥",
+        "description": "Apply as a content creator (1k subs / 500 views).",
+        "color": discord.Color.orange(),
+    },
+    TicketType.BUILDER: {
+        "label": "Builder App",
+        "emoji": "🧱",
+        "description": "Apply to help build maps or arenas.",
+        "color": discord.Color.dark_gold(),
     },
 }
 
@@ -482,6 +549,7 @@ async def _create_ticket_thread(
     embed.set_footer(text=f"User ID: {member.id}")
 
     await thread.send(content=member.mention, embed=embed)
+    await _grant_support_team_access(thread)
     LOGGER.info(
         "Created %s ticket for user %s in thread %s",
         ticket_type.value,
@@ -489,6 +557,27 @@ async def _create_ticket_thread(
         thread.id,
     )
     return thread
+
+
+async def _grant_support_team_access(thread: discord.Thread) -> None:
+    guild = thread.guild
+    if guild is None:
+        return
+    role = _support_role(guild)
+    if role is None:
+        return
+    for supporter in role.members:
+        if supporter.bot:
+            continue
+        try:
+            await thread.add_user(supporter)
+        except discord.HTTPException as exc:
+            LOGGER.debug(
+                "Unable to add supporter %s to thread %s: %s",
+                supporter,
+                thread.id,
+                exc,
+            )
 
 
 class TicketReasonModal(discord.ui.Modal):
@@ -536,52 +625,63 @@ class TicketReasonModal(discord.ui.Modal):
         )
 
 
-class StaffApplicationModal(discord.ui.Modal):
-    username = discord.ui.TextInput(
-        label="Primary username / IGN",
-        placeholder="e.g. horisont1",
-        max_length=64,
-        required=True,
-    )
-    age = discord.ui.TextInput(
-        label="Age",
-        placeholder="Provide your age",
-        max_length=32,
-        required=True,
-    )
-    staff_experience = discord.ui.TextInput(
-        label="Staff experience",
-        placeholder="Where have you moderated? List roles and durations.",
-        style=discord.TextStyle.paragraph,
-        max_length=500,
-        required=True,
-    )
-    general_experience = discord.ui.TextInput(
-        label="Community experience",
-        placeholder="Relevant achievements, strengths, specialties.",
-        style=discord.TextStyle.paragraph,
-        max_length=500,
-        required=True,
-    )
-    creator_presence = discord.ui.TextInput(
-        label="Content creator stats",
-        placeholder=(
-            "Links + metrics. Min: 1k subs & 500 avg views or 20+ live viewers."
-        ),
-        style=discord.TextStyle.paragraph,
-        max_length=500,
-        required=True,
-    )
-    availability = discord.ui.TextInput(
-        label="Availability",
-        placeholder="Hours per week and time zones you can help.",
-        style=discord.TextStyle.short,
-        max_length=200,
-        required=True,
-    )
-
-    def __init__(self) -> None:
-        super().__init__(title="Staff/Creator App")
+class ApplicationModal(discord.ui.Modal):
+    def __init__(self, application_type: TicketType):
+        title = f"{TICKET_DETAILS[application_type]['label']} Request"
+        super().__init__(title=title)
+        self.application_type = application_type
+        self.username = discord.ui.TextInput(
+            label="Primary username / IGN",
+            placeholder="e.g. horisont1",
+            max_length=64,
+            required=True,
+        )
+        self.age = discord.ui.TextInput(
+            label="Age",
+            placeholder="How old are you?",
+            max_length=32,
+            required=True,
+        )
+        experience_placeholder = "Describe your staff experience."
+        if application_type is TicketType.CREATOR:
+            experience_placeholder = "Share your channel history & collabs."
+        elif application_type is TicketType.BUILDER:
+            experience_placeholder = "Tell us about previous build projects."
+        self.experience = discord.ui.TextInput(
+            label="Experience",
+            placeholder=experience_placeholder,
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+            required=True,
+        )
+        portfolio_placeholder = "What strengths will you bring to the team?"
+        if application_type is TicketType.CREATOR:
+            portfolio_placeholder = (
+                "Channel links & stats (min 1k subs / 500 views or 20+ live viewers)."
+            )
+        elif application_type is TicketType.BUILDER:
+            portfolio_placeholder = "Links to portfolio, schematics, or screenshots."
+        self.portfolio = discord.ui.TextInput(
+            label="Highlights / Links",
+            placeholder=portfolio_placeholder,
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+            required=True,
+        )
+        self.availability = discord.ui.TextInput(
+            label="Availability",
+            placeholder="Hours per week + time zones you can help.",
+            max_length=200,
+            required=True,
+        )
+        for component in (
+            self.username,
+            self.age,
+            self.experience,
+            self.portfolio,
+            self.availability,
+        ):
+            self.add_item(component)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if interaction.guild is None or not isinstance(
@@ -596,14 +696,14 @@ class StaffApplicationModal(discord.ui.Modal):
         responses = {
             "Username": self.username.value,
             "Age": self.age.value,
-            "Staff experience": self.staff_experience.value,
-            "Community experience": self.general_experience.value,
-            "Creator stats": self.creator_presence.value,
+            "Experience": self.experience.value,
+            "Highlights / Links": self.portfolio.value,
             "Availability": self.availability.value,
+            "Application type": TICKET_DETAILS[self.application_type]["label"],
         }
         try:
             thread = await _create_ticket_thread(
-                interaction.user, TicketType.APPLICATION, responses
+                interaction.user, self.application_type, responses
             )
         except RuntimeError as exc:
             LOGGER.error("Application ticket failed: %s", exc)
@@ -621,11 +721,15 @@ class StaffApplicationModal(discord.ui.Modal):
 class TicketTypeSelect(discord.ui.Select):
     def __init__(self) -> None:
         options = []
-        for ticket_type in (
+        selectable = (
             TicketType.GENERAL,
             TicketType.PARTNER,
             TicketType.REPORT,
-        ):
+            TicketType.STAFF,
+            TicketType.CREATOR,
+            TicketType.BUILDER,
+        )
+        for ticket_type in selectable:
             details = TICKET_DETAILS[ticket_type]
             options.append(
                 discord.SelectOption(
@@ -646,7 +750,14 @@ class TicketTypeSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         value = self.values[0]
         ticket_type = TicketType(value)
-        await interaction.response.send_modal(TicketReasonModal(ticket_type))
+        if ticket_type in (
+            TicketType.STAFF,
+            TicketType.CREATOR,
+            TicketType.BUILDER,
+        ):
+            await interaction.response.send_modal(ApplicationModal(ticket_type))
+        else:
+            await interaction.response.send_modal(TicketReasonModal(ticket_type))
 
 
 class StaffApplicationButton(discord.ui.Button):
@@ -654,12 +765,12 @@ class StaffApplicationButton(discord.ui.Button):
         super().__init__(
             label="Staff/Creator App",
             style=discord.ButtonStyle.primary,
-            emoji=TICKET_DETAILS[TicketType.APPLICATION]["emoji"],
+            emoji=TICKET_DETAILS[TicketType.STAFF]["emoji"],
             custom_id="support_panel:application",
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
-        await interaction.response.send_modal(StaffApplicationModal())
+        await interaction.response.send_modal(ApplicationModal(TicketType.STAFF))
 
 
 class SupportPanelView(discord.ui.View):
@@ -684,13 +795,24 @@ async def ensure_support_panel(guild: discord.Guild) -> None:
         ),
         color=discord.Color.dark_teal(),
     )
+    support_lines = [
+        f"{details['emoji']} **{details['label']}** – {details['description']}"
+        for key, details in TICKET_DETAILS.items()
+        if key in (TicketType.GENERAL, TicketType.PARTNER, TicketType.REPORT)
+    ]
+    application_lines = [
+        f"{details['emoji']} **{details['label']}** – {details['description']}"
+        for key, details in TICKET_DETAILS.items()
+        if key in (TicketType.STAFF, TicketType.CREATOR, TicketType.BUILDER)
+    ]
     embed.add_field(
-        name="Ticket options",
-        value="\n".join(
-            f"{details['emoji']} **{details['label']}** – {details['description']}"
-            for key, details in TICKET_DETAILS.items()
-            if key is not TicketType.APPLICATION
-        ),
+        name="Support options",
+        value="\n".join(support_lines),
+        inline=False,
+    )
+    embed.add_field(
+        name="Application options",
+        value="\n".join(application_lines),
         inline=False,
     )
     embed.add_field(
@@ -702,6 +824,14 @@ async def ensure_support_panel(guild: discord.Guild) -> None:
         ),
         inline=False,
     )
+    support_role = _support_role(guild)
+    staff_tools = (
+        f"{support_role.mention} can use `/ticket_claim` and `/ticket_close` inside "
+        "tickets. Everyone with this role is auto-added."
+        if support_role
+        else "Support leads can use `/ticket_claim` and `/ticket_close` inside any ticket thread."
+    )
+    embed.add_field(name="Staff tools", value=staff_tools, inline=False)
     embed.set_footer(text=SUPPORT_PANEL_FOOTER)
 
     panel_message: discord.Message | None = None
@@ -1011,6 +1141,52 @@ async def slash_warnings(
             inline=False,
         )
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@bot.tree.command(
+    name="ticket_claim",
+    description="Claim the ticket thread you are currently in.",
+)
+@app_commands.guilds(GUILD_OBJECT)
+@app_commands.guild_only()
+async def ticket_claim(interaction: discord.Interaction) -> None:
+    guard = await _ticket_staff_guard(interaction)
+    if guard is None:
+        return
+    thread, member = guard
+    await thread.send(f"{member.mention} claimed this ticket.")
+    if interaction.response.is_done():
+        await interaction.followup.send("Ticket claimed.", ephemeral=True)
+    else:
+        await interaction.response.send_message("Ticket claimed.", ephemeral=True)
+
+
+@bot.tree.command(
+    name="ticket_close",
+    description="Close the active ticket thread.",
+)
+@app_commands.guilds(GUILD_OBJECT)
+@app_commands.guild_only()
+@app_commands.describe(reason="Optional closure note")
+async def ticket_close(interaction: discord.Interaction, reason: str | None = None) -> None:
+    guard = await _ticket_staff_guard(interaction)
+    if guard is None:
+        return
+    thread, member = guard
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    reason_text = reason.strip() if reason else "No reason provided."
+    await thread.send(
+        f"{member.mention} closed this ticket. Reason: {reason_text}"
+    )
+    try:
+        await thread.edit(archived=True, locked=True, reason=reason_text)
+    except discord.HTTPException as exc:
+        LOGGER.error("Failed to close thread %s: %s", thread.id, exc)
+        await interaction.followup.send(
+            "Could not close the ticket, please try again.", ephemeral=True
+        )
+        return
+    await interaction.followup.send("Ticket closed.", ephemeral=True)
 
 
 @bot.tree.error
