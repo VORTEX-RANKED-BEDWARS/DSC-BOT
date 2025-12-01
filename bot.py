@@ -736,7 +736,9 @@ async def ensure_support_panel(guild: discord.Guild) -> None:
             LOGGER.error("Failed to create ticket panel: %s", exc)
 
 
-bot.add_view(SupportPanelView())
+@bot.event
+async def setup_hook() -> None:
+    bot.add_view(SupportPanelView())
 
 
 @bot.event
